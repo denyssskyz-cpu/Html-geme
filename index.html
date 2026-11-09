@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Battle Island — Mini Shooter</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101522;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
+#app{height:100vh;position:relative;background:linear-gradient(#18253d,#0d1320)}
+canvas{display:block;width:100%;height:100%}
+.hud{position:absolute;inset:0;pointer-events:none}
+.top{display:flex;justify-content:space-between;gap:8px;padding:12px;align-items:center}
+.card{background:#111a2bd9;border:1px solid #ffffff22;border-radius:12px;padding:8px 12px}
+.stats{display:flex;gap:8px}
+#menu,#admin{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#07101dcc;pointer-events:auto}
+.panel{width:min(92%,520px);max-height:88vh;overflow:auto;background:#151e31;border:1px solid #ffffff22;border-radius:18px;padding:20px;box-shadow:0 20px 70px #0008}
+h1,h2{margin-top:0}.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+button{border:0;border-radius:10px;padding:11px 15px;background:#2d7cff;color:#fff;font-weight:bold;cursor:pointer}
+button.alt{background:#27344c}button.danger{background:#c33}
+input,select{width:100%;padding:10px;border-radius:9px;border:1px solid #ffffff22;background:#0c1423;color:#fff}
+.small{opacity:.75;font-size:13px}.mobile{position:absolute;bottom:18px;left:0;right:0;display:flex;justify-content:space-between;padding:0 18px;pointer-events:auto}
+.pad{display:grid;grid-template-columns:repeat(3,55px);gap:5px}.pad button,.fire{width:55px;height:55px;padding:0;border-radius:50%;opacity:.8}
+.fire{width:78px;height:78px;background:#e44;font-size:16px}
+.toast{position:absolute;bottom:110px;left:50%;transform:translateX(-50%);background:#111a2b;padding:10px 15px;border-radius:10px;display:none}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="game"></canvas>
+<div class="hud">
+  <div class="top">
+    <div class="card">❤️ <span id="hp">100</span></div>
+    <div class="stats">
+      <div class="card">💎 <span id="diamonds">500</span></div>
+      <div class="card">🪙 <span id="coins">1000</span></div>
+      <div class="card">🏆 <span id="score">0</span></div>
+    </div>
+    <button id="adminBtn">ADMIN</button>
+  </div>
+  <div class="mobile">
+    <div class="pad">
+      <span></span><button data-key="up">▲</button><span></span>
+      <button data-key="left">◀</button><button data-key="down">▼</button><button data-key="right">▶</button>
+    </div>
+    <button class="fire" id="fire">FIRE</button>
+  </div>
+</div>
+
+<div id="menu">
+ <div class="panel">
+  <h1>🏝️ Battle Island</h1>
+  <p>Mini game shooter original — terinspirasi genre battle royale, bukan salinan Free Fire.</p>
+  <div class="row">
+   <button id="start">Mulai Game</button>
+   <button class="alt" id="shop">Shop</button>
+   <button class="alt" id="closeMenu">Tutup</button>
+  </div>
+  <p class="small">Kontrol: WASD / tombol arah, klik atau FIRE untuk menembak.</p>
+ </div>
+</div>
+
+<div id="admin">
+ <div class="panel">
+  <h2>🛠️ Admin Panel</h2>
+  <p class="small">Mode admin lokal untuk game ini. Tidak terhubung ke server atau akun game lain.</p>
+  <label>Tambah Diamond</label>
+  <input id="diamondInput" type="number" value="1000">
+  <div class="row">
+   <button id="addDiamond">Tambah</button>
+   <button id="heal">Full HP</button>
+   <button id="spawn">Spawn Musuh</button>
+   <button class="danger" id="reset">Reset Data</button>
+   <button class="alt" id="closeAdmin">Tutup</button>
+  </div>
+ </div>
+</div>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let W,H,keys={},running=false,hp=100,diamonds=500,coins=1000,score=0;
+let player={x:0,y:0,r:18,speed:4}, bullets=[], enemies=[];
+const $=id=>document.getElementById(id);
+function resize(){W=canvas.width=innerWidth*devicePixelRatio;H=canvas.height=innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);W=innerWidth;H=innerHeight;if(!player.x){player.x=W/2;player.y=H/2}}
+addEventListener('resize',resize);resize();
+
+function toast(t){$('toast').textContent=t;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',1400)}
+function updateHud(){$('hp').textContent=Math.max(0,Math.floor(hp));$('diamonds').textContent=diamonds;$('coins').textContent=coins;$('score').textContent=score}
+function spawnEnemy(){
+ let side=Math.floor(Math.random()*4),x=side<2?Math.random()*W:(side===2?-30:W+30),y=side<2?(side===0?-30:H+30):Math.random()*H;
+ enemies.push({x,y,r:16,hp:2,speed:1+Math.random()*1.2});
+}
+function shoot(){
+ if(!running)return;
+ let target=enemies.length?enemies[Math.floor(Math.random()*enemies.length)]:null;
+ let a=target?Math.atan2(target.y-player.y,target.x-player.x):0;
+ bullets.push({x:player.x,y:player.y,vx:Math.cos(a)*9,vy:Math.sin(a)*9});
+}
+function reset(){hp=100;diamonds=500;coins=1000;score=0;bullets=[];enemies=[];player.x=W/2;player.y=H/2;updateHud()}
+function loop(){
+ requestAnimationFrame(loop); if(!running)return;
+ ctx.clearRect(0,0,W,H);
+ ctx.fillStyle='#1b5a39';ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle='#2d754c';for(let x=0;x<W;x+=45){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=45){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ let dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0);
+ if(keys.left)dx=-1;if(keys.right)dx=1;if(keys.up)dy=-1;if(keys.down)dy=1;
+ let len=Math.hypot(dx,dy)||1;player.x=Math.max(20,Math.min(W-20,player.x+dx/len*player.speed));player.y=Math.max(60,Math.min(H-20,player.y+dy/len*player.speed));
+ if(Math.random()<.018)spawnEnemy();
+ for(const b of bullets){b.x+=b.vx;b.y+=b.vy}
+ bullets=bullets.filter(b=>b.x>-20&&b.x<W+20&&b.y>-20&&b.y<H+20);
+ for(const e of enemies){
+  let a=Math.atan2(player.y-e.y,player.x-e.x);e.x+=Math.cos(a)*e.speed;e.y+=Math.sin(a)*e.speed;
+  if(Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r){hp-=.25;if(hp<=0){running=false;toast('Kalah! Tekan Mulai Game untuk mencoba lagi.');}}
+ }
+ for(const b of bullets)for(const e of enemies)if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+4){e.hp--;b.x=-999;if(e.hp<=0){e.dead=true;score+=10;coins+=5;}}
+ enemies=enemies.filter(e=>!e.dead);
+ ctx.fillStyle='#4aa3ff';ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#ffd34d';for(const b of bullets){ctx.beginPath();ctx.arc(b.x,b.y,4,0,Math.PI*2);ctx.fill()}
+ ctx.fillStyle='#ff5b5b';for(const e of enemies){ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fill()}
+ updateHud();
+}
+loop();
+
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===' '){e.preventDefault();shoot()}});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+$('fire').onclick=shoot;
+document.querySelectorAll('[data-key]').forEach(b=>{b.onpointerdown=()=>keys[b.dataset.key]=true;b.onpointerup=()=>keys[b.dataset.key]=false;b.onpointerleave=()=>keys[b.dataset.key]=false});
+$('start').onclick=()=>{reset();running=true;$('menu').style.display='none';toast('Game dimulai!')};
+$('closeMenu').onclick=()=>{$('menu').style.display='none'};
+$('shop').onclick=()=>toast('Shop demo: fitur item bisa ditambahkan.');
+$('adminBtn').onclick=()=>{$('admin').style.display='flex'};
+$('closeAdmin').onclick=()=>{$('admin').style.display='none'};
+$('addDiamond').onclick=()=>{diamonds+=Math.max(0,+$('diamondInput').value||0);updateHud();toast('Diamond ditambahkan')};
+$('heal').onclick=()=>{hp=100;updateHud();toast('HP penuh')};
+$('spawn').onclick=()=>{for(let i=0;i<5;i++)spawnEnemy();toast('5 musuh muncul')};
+$('reset').onclick=()=>{reset();toast('Data game direset')};
+setTimeout(()=>$('menu').style.display='flex',300);
+</script>
+</body>
+</html>
